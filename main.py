@@ -1,5 +1,6 @@
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support.expected_conditions import presence_of_element_located as PresenceOfElementLocated, element_to_be_clickable as ElementToBeClickable
 from selenium.webdriver.support.ui import Select
@@ -7,21 +8,24 @@ from selenium.common.exceptions import NoSuchWindowException, TimeoutException
 from urllib.parse import urlencode, urlparse
 from time import sleep
 from os import chdir, listdir, path
-#from html import escape as htmlescape
+
+# 옵션
+naverid = ''
+naverpw = ''
+usequickwrite = False
+usewatermark = False
+useescro = False
+useotn = False
+fontsize = 18
+homepath = '~/Desktop'
 
 # URLs
 writepageurl = 'https://cafe.naver.com/ArticleWrite.nhn?clubid=10050146&m=write'
 #loginpageurl = 'https://nid.naver.com/nidlogin.login'
 #loginpageurl += '?' + urlencode({'mode':'number' if onetimelogin else 'form', 'url':writepageurl})
 
-# Default Options
-usewatermark = False
-useescro = True
-useotn = True
-fontsize = 18
-homepath = '~/Desktop'
-
 with Chrome('./chromedriver') as driver:
+    shortwait = WebDriverWait(driver, 3)
     wait = WebDriverWait(driver, 10)
     longwait = WebDriverWait(driver, 600)
 
@@ -29,27 +33,78 @@ with Chrome('./chromedriver') as driver:
         # 사용자를 로그인 시키고, 글쓰기 페이지로 이동하기
         driver.get(writepageurl)
         while driver.current_url != writepageurl:
-            try:
+            if len(naverid) and len(naverpw) and urlparse(driver.current_url).netloc == 'nid.naver.com':
+                wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'input#id'))).send_keys(naverid)
+                driver.find_element_by_css_selector('input#pw').send_keys(naverpw + Keys.RETURN)
+                try:
+                    shortwait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'div.captcha')))
+                    sleep(0.5)
+                    driver.find_element_by_css_selector('input#pw').send_keys(naverpw)
+                    driver.find_element_by_css_selector('input#chptcha').click()
+                except TimeoutException:
+                    pass
+            try: 
                 longwait.until(lambda d: urlparse(d.current_url).netloc != 'nid.naver.com')
+                driver.get(writepageurl)
             except (NoSuchWindowException, TimeoutException):
                 exit()
-            driver.get(writepageurl)
-
+            
         # 쓰기 페이지의 로딩을 기다리기
         wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'h3.bi')))
 
         # 사용자가 파일을 선택할 수 있게, 쓰기 페이지를 변조하기
         driver.execute_script("""
-        document.querySelector('h3.bi').innerHTML = 
-            '내용 채우기할 파일 선택 -> <input id="ju-file" type="file" accept=".txt"><pre id="ju-txt" style="visibility: collapse; height: 0px;"></pre>';
-        document.getElementById('ju-file').onchange = e => { 
+        var bi = document.querySelector('h3.bi');
+        bi.innerHTML = '';
+
+        bi.appendChild(document.createTextNode('내용 채우기할 파일 선택 ->'));
+
+        var fileinput = document.createElement('input');
+        fileinput.setAttribute('id', 'ju-file');
+        fileinput.setAttribute('type', 'file');
+        fileinput.setAttribute('accept', '.txt');
+        bi.appendChild(fileinput);
+
+        bi.appendChild(document.createTextNode('  글바로작성:'));
+        var quickchk = document.createElement('input');
+        quickchk.setAttribute('id', 'ju-quick');
+        quickchk.setAttribute('type', 'checkbox');
+        quickchk.checked = """+('true' if usequickwrite else 'false')+""";
+        bi.appendChild(quickchk);
+
+        bi.appendChild(document.createTextNode('  워터마크:'));
+        var wmchk = document.createElement('input');
+        wmchk.setAttribute('id', 'ju-wm');
+        wmchk.setAttribute('type', 'checkbox');
+        wmchk.checked = """+('true' if usewatermark else 'false')+""";
+        bi.appendChild(wmchk);
+        
+        bi.appendChild(document.createTextNode('  안전거래:'));
+        var escrochk = document.createElement('input');
+        escrochk.setAttribute('id', 'ju-escro');
+        escrochk.setAttribute('type', 'checkbox');
+        escrochk.checked = """+('true' if useescro else 'false')+""";
+        bi.appendChild(escrochk);
+
+        bi.appendChild(document.createTextNode('  안심번호:'));
+        var otnchk = document.createElement('input');
+        otnchk.setAttribute('id', 'ju-otn');
+        otnchk.setAttribute('type', 'checkbox');
+        otnchk.checked = """+('true' if useotn else 'false')+""";
+        bi.appendChild(otnchk);
+
+        var pre = document.createElement('pre');
+        pre.setAttribute('id', 'ju-txt');
+        pre.setAttribute('style', 'visibility: collapse; height: 0px;');
+        bi.appendChild(pre);
+
+        fileinput.onchange = e => { 
             var file = e.target.files[0];
             if (file.type == 'text/plain') {
                 var reader = new FileReader();
                 reader.readAsText(file,'UTF-8');
                 reader.onload = re => {
-                    var txt = re.target.result;
-                    document.getElementById('ju-txt').innerHTML = txt;
+                    pre.innerHTML = re.target.result;
                 }
             } else {
                 alert('텍스트 파일만 선택 가능합니다.');
@@ -68,14 +123,20 @@ with Chrome('./chromedriver') as driver:
         picspath, category, title, price = jutxtsplit[0], jutxtsplit[1], jutxtsplit[2], jutxtsplit[3]
         content = '\n'.join(jutxtsplit[4:])
 
+        # 카테고리 변경 전, 설정 갱신
+        usequickwrite = driver.execute_script('return document.querySelector("#ju-quick").checked;')
+        usewatermark = driver.execute_script('return document.querySelector("#ju-wm").checked;')
+        useescro = driver.execute_script('return document.querySelector("#ju-escro").checked;')
+        useotn = driver.execute_script('return document.querySelector("#ju-otn").checked;')
+
         # 카테고리 변경하기
         Select(driver.find_element_by_css_selector('select#boardCategory')).select_by_visible_text(category)
         sleep(.5)
         driver.switch_to.alert.accept()
 
         # 내용 일부 채우기
-        driver.find_element_by_css_selector('input#subject').send_keys(title)
         wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'input#sale_cost'))).send_keys(price)
+        driver.find_element_by_css_selector('input#subject').send_keys(title)
 
         # 안전거래 및 연락처 공개 설정하기
         driver.find_element_by_css_selector('input#sale_open_phone').click()
@@ -122,7 +183,7 @@ with Chrome('./chromedriver') as driver:
         content = content.replace('\'', '\\\'')
         content = content.replace('\\', '\\\\')
         driver.execute_script("""
-        var node = document.createElement("span");
+        var node = document.createElement('span');
         node.innerHTML = '<br>"""+content+"""';
         node.style.fontSize = """+str(fontsize)+""";
         document.body.appendChild(node);
@@ -130,4 +191,12 @@ with Chrome('./chromedriver') as driver:
         driver.switch_to.parent_frame()
 
         # 글쓰기 완료를 기다리기
-        longwait.until(lambda d: urlparse(d.current_url).path != urlparse(writepageurl).path)
+        if usequickwrite:
+            sleep(1)
+            driver.find_element_by_css_selector('a#cafewritebtn').click()
+            wait.until(lambda d: urlparse(d.current_url).path != urlparse(writepageurl).path)
+        else:
+            try:
+                longwait.until(lambda d: urlparse(d.current_url).path != urlparse(writepageurl).path)
+            except (NoSuchWindowException, TimeoutException):
+                exit()
