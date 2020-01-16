@@ -8,6 +8,7 @@ from selenium.common.exceptions import NoSuchWindowException, TimeoutException
 from urllib.parse import urlencode, urlparse
 from time import sleep
 from os import chdir, listdir, path
+from platform import system as getos
 
 # 옵션
 naverid = ''
@@ -24,7 +25,11 @@ writepageurl = 'https://cafe.naver.com/ArticleWrite.nhn?clubid=10050146&m=write'
 #loginpageurl = 'https://nid.naver.com/nidlogin.login'
 #loginpageurl += '?' + urlencode({'mode':'number' if onetimelogin else 'form', 'url':writepageurl})
 
-with Chrome('./chromedriver') as driver:
+chromedriver = './chromedriver.exe' if getos() == 'Windows' else './chromedriver'
+if not path.isfile(chromedriver):
+    exit('Error: %s is required in current path.' % chromedriver)
+
+with Chrome(chromedriver) as driver:
     shortwait = WebDriverWait(driver, 3)
     wait = WebDriverWait(driver, 10)
     longwait = WebDriverWait(driver, 600)
@@ -34,21 +39,27 @@ with Chrome('./chromedriver') as driver:
         driver.get(writepageurl)
         while driver.current_url != writepageurl:
             if len(naverid) and len(naverpw) and urlparse(driver.current_url).netloc == 'nid.naver.com':
-                wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'input#id'))).send_keys(naverid)
-                driver.find_element_by_css_selector('input#pw').send_keys(naverpw + Keys.RETURN)
+                wait.until(PresenceOfElementLocated(
+                    (By.CSS_SELECTOR, 'input#id'))).send_keys(naverid)
+                driver.find_element_by_css_selector(
+                    'input#pw').send_keys(naverpw + Keys.RETURN)
                 try:
-                    shortwait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'div.captcha')))
+                    shortwait.until(PresenceOfElementLocated(
+                        (By.CSS_SELECTOR, 'div.captcha')))
                     sleep(0.5)
-                    driver.find_element_by_css_selector('input#pw').send_keys(naverpw)
-                    driver.find_element_by_css_selector('input#chptcha').click()
+                    driver.find_element_by_css_selector(
+                        'input#pw').send_keys(naverpw)
+                    driver.find_element_by_css_selector(
+                        'input#chptcha').click()
                 except TimeoutException:
                     pass
-            try: 
-                longwait.until(lambda d: urlparse(d.current_url).netloc != 'nid.naver.com')
+            try:
+                longwait.until(lambda d: urlparse(
+                    d.current_url).netloc != 'nid.naver.com')
                 driver.get(writepageurl)
             except (NoSuchWindowException, TimeoutException):
                 exit()
-            
+
         # 쓰기 페이지의 로딩을 기다리기
         wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'h3.bi')))
 
@@ -114,29 +125,40 @@ with Chrome('./chromedriver') as driver:
 
         # 사용자가 프리셋 파일 선택하기를 기다리기
         try:
-            longwait.until(lambda d: d.find_element_by_id('ju-txt').get_property('innerHTML') != '')
+            longwait.until(lambda d: d.find_element_by_id(
+                'ju-txt').get_property('innerHTML') != '')
         except (NoSuchWindowException, TimeoutException):
             exit()
 
         # 프리셋 가져오기
-        jutxtsplit = driver.find_element_by_id('ju-txt').get_property('innerHTML').split('\n')
+        jutxtsplit = driver.find_element_by_id(
+            'ju-txt').get_property('innerHTML').split('\n')
         picspath, category, title, price = jutxtsplit[0], jutxtsplit[1], jutxtsplit[2], jutxtsplit[3]
         content = '\n'.join(jutxtsplit[4:])
 
         # 카테고리 변경 전, 설정 갱신
-        usequickwrite = driver.execute_script('return document.querySelector("#ju-quick").checked;')
-        usewatermark = driver.execute_script('return document.querySelector("#ju-wm").checked;')
-        useescro = driver.execute_script('return document.querySelector("#ju-escro").checked;')
-        useotn = driver.execute_script('return document.querySelector("#ju-otn").checked;')
+        usequickwrite = driver.execute_script(
+            'return document.querySelector("#ju-quick").checked;')
+        usewatermark = driver.execute_script(
+            'return document.querySelector("#ju-wm").checked;')
+        useescro = driver.execute_script(
+            'return document.querySelector("#ju-escro").checked;')
+        useotn = driver.execute_script(
+            'return document.querySelector("#ju-otn").checked;')
 
         # 카테고리 변경하기
-        Select(driver.find_element_by_css_selector('select#boardCategory')).select_by_visible_text(category)
+        Select(driver.find_element_by_css_selector(
+            'select#boardCategory')).select_by_visible_text(category)
         sleep(.5)
         driver.switch_to.alert.accept()
 
         # 내용 일부 채우기
-        wait.until(PresenceOfElementLocated((By.CSS_SELECTOR, 'input#sale_cost'))).send_keys(price)
-        driver.find_element_by_css_selector('input#subject').send_keys(title)
+        wait.until(PresenceOfElementLocated(
+            (By.CSS_SELECTOR, 'input#sale_cost'))).send_keys(price)
+        # driver.find_element_by_css_selector('input#subject').send_keys(title)
+        driver.execute_script("""
+            document.querySelector('input#subject').value='%s';
+        """ % title.replace('\'', '\\\'').replace('\\', '\\\\'))
 
         # 안전거래 및 연락처 공개 설정하기
         driver.find_element_by_css_selector('input#sale_open_phone').click()
@@ -154,30 +176,37 @@ with Chrome('./chromedriver') as driver:
         driver.find_element_by_css_selector('a.ico_pic').click()
         driver.switch_to.window(driver.window_handles[-1])
         sleep(.5)
-        wait.until(ElementToBeClickable((By.CSS_SELECTOR, 'button.npe_alert_btn_close'))).click()
+        wait.until(ElementToBeClickable(
+            (By.CSS_SELECTOR, 'button.npe_alert_btn_close'))).click()
 
         # 업로드할 사진 목록 준비하기
         homepath = path.expanduser(homepath)
         chdir(homepath)
         picpaths = listdir(picspath)
-        picpaths = list(filter(lambda f: str.upper(f.split('.')[-1]) in ['JPEG', 'JPG', 'PNG'], picpaths))
+        picpaths = list(filter(lambda f: str.upper(
+            f.split('.')[-1]) in ['JPEG', 'JPG', 'PNG'], picpaths))
         picpaths.sort()
-        picpaths = list(map(lambda f: path.join(homepath, picspath, f), picpaths))
-        
+        picpaths = list(map(lambda f: path.join(
+            homepath, picspath, f), picpaths))[:20]
+
         # 사진 업로드하기
-        driver.find_element_by_css_selector('input#pc_image_file').send_keys('\n'.join(picpaths))
-        longwait.until(lambda d: not driver.find_element_by_css_selector('div.npe_alert').is_displayed())
+        driver.find_element_by_css_selector(
+            'input#pc_image_file').send_keys('\n'.join(picpaths))
+        longwait.until(lambda d: not driver.find_element_by_css_selector(
+            'div.npe_alert').is_displayed())
 
         # 사진크기 설정을 변경하고 올리기 버튼을 눌러서 업로드 완료하기
         driver.find_element_by_class_name('npu_size_select').click()
-        driver.find_element_by_css_selector(".npu_size_item[data-resize='original']").click()
+        driver.find_element_by_css_selector(
+            ".npu_size_item[data-resize='original']").click()
         sleep(.5)
         driver.find_element_by_class_name('npu_btn_submit').click()
         longwait.until(lambda d: len(d.window_handles) == 1)
         driver.switch_to.window(driver.window_handles[0])
 
         # 글내용 덧붙이기
-        driver.switch_to.frame(driver.find_element_by_css_selector('table#toolbox iframe'))
+        driver.switch_to.frame(
+            driver.find_element_by_css_selector('table#toolbox iframe'))
         #content = htmlescape(content)
         content = content.replace('\n', '<br>')
         content = content.replace('\'', '\\\'')
@@ -194,9 +223,11 @@ with Chrome('./chromedriver') as driver:
         if usequickwrite:
             sleep(1)
             driver.find_element_by_css_selector('a#cafewritebtn').click()
-            wait.until(lambda d: urlparse(d.current_url).path != urlparse(writepageurl).path)
+            wait.until(lambda d: urlparse(d.current_url).path !=
+                       urlparse(writepageurl).path)
         else:
             try:
-                longwait.until(lambda d: urlparse(d.current_url).path != urlparse(writepageurl).path)
+                longwait.until(lambda d: urlparse(
+                    d.current_url).path != urlparse(writepageurl).path)
             except (NoSuchWindowException, TimeoutException):
                 exit()
