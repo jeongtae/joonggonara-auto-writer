@@ -1,3 +1,7 @@
+*2020년 8월, 네이버 카페 글쓰기 에디터의 대대적인 개편이 이뤄짐에 따라, 본 애플리케이션은 사용할 수 없게 되었습니다. 또한 업데이트도 중단됩니다. 대신에 [jeongtae/joongna-auto](https://github.com/jeongtae/joongna-auto)를 이용해주시기 바랍니다.*
+
+---
+
 # Joonggonara Auto Writer
 
 중고나라 판매글을 자동으로 올려줍니다.
